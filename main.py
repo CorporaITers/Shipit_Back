@@ -22,7 +22,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ログ設定
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
 logger = logging.getLogger(__name__)
 
 api_key = os.getenv("OPENAI_API_KEY")
