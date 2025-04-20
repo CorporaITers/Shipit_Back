@@ -338,9 +338,6 @@ async def get_pdf_links_from_cosco(destination_keyword: str) -> list[str]:
             env=os.environ.copy(),  # 現在の環境変数を明示的に渡す（Playwrightの実行にも必要）
         )
 
-        script_path = Path(__file__).resolve().parent / "app" / "get_pdf_links.py"
-        cwd_path = script_path.parent
-
         logger.info(f"[COSCO PDFリンク取得] stdout:\n{result.stdout}")
         return json.loads(result.stdout)
 
