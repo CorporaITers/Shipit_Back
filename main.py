@@ -16,12 +16,20 @@ import httpx
 from pathlib import Path
 import sys
 from urllib.parse import unquote
+from dotenv import load_dotenv
+
+# ローカル用 .env 読み込み（Azure環境では無視される）
+load_dotenv()
 
 # ログ設定
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+api_key = os.getenv("OPENAI_API_KEY")
+if not api_key:
+    raise RuntimeError("❌ OPENAI_API_KEY が設定されていません。Azure の構成または .env を確認してください。")
+
+client = OpenAI(api_key=api_key)
 
 app = FastAPI()
 

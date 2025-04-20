@@ -5,9 +5,10 @@ import logging
 from dotenv import load_dotenv
 from pathlib import Path
 
-# load_dotenv() に .env のパスを明示する
-dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
-load_dotenv(dotenv_path)
+if os.getenv("OPENAI_API_KEY") is None:
+    from dotenv import load_dotenv
+    dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+    load_dotenv(dotenv_path)
 
 # ロガー設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")

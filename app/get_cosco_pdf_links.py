@@ -7,8 +7,10 @@ from unicodedata import normalize
 
 from pathlib import Path
 
-dotenv_path = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path)
+if os.getenv("OPENAI_API_KEY") is None:
+    from dotenv import load_dotenv
+    dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+    load_dotenv(dotenv_path)
 
 # ログ設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
