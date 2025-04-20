@@ -22,8 +22,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ログ設定
-logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
@@ -313,13 +313,19 @@ async def get_pdf_links_from_one(destination_keyword: str) -> list[str]:
 
         logger.info(f"[DEBUG] get_pdf_links.py stdout:\n{result.stdout}")
         return json.loads(result.stdout)
+    
     except json.JSONDecodeError as je:
         logger.error(f"[ERROR] JSON Decode Error: {je}")
         logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
         return []
+    
+    except subprocess.CalledProcessError as cpe:
+        logger.error(f"[CalledProcessError] stderr:\n{cpe.stderr}")
+        logger.error(f"[CalledProcessError] stdout:\n{cpe.stdout}")
+        return []
+    
     except Exception as e:
-        logger.error(f"[get_pdf_links.py stderr]:\n{e.stderr}")
-        logger.error(f"[get_pdf_links.py stdout]:\n{e.stdout}")
+        logger.error(f"[ERROR] ONE get_pdf_links 実行失敗: {e}")
         return []
     
 # COSCOのPDFリンク取得用
