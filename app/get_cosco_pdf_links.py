@@ -108,7 +108,7 @@ def get_pdf_links(destination_keyword, silent=False):
     url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"])
         page = browser.new_page()
         page.goto(url, timeout=60000)
 
