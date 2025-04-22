@@ -17,6 +17,8 @@ from pathlib import Path
 import sys
 from urllib.parse import unquote
 from dotenv import load_dotenv
+import traceback
+from fastapi.responses import JSONResponse
 
 # ローカル用 .env 読み込み（Azure環境では無視される）
 load_dotenv()
@@ -675,6 +677,24 @@ async def update_feedback(data: FeedbackRequest):
     except Exception as e:
         logger.exception("フィードバック記録中にエラー")
         raise HTTPException(status_code=500, detail="フィードバックの保存に失敗しました。")
+
+# -------------------------------
+# エラーハンドリングミドルウェア
+# -------------------------------
+@app.middleware("http")
+async def catch_exceptions_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        # エラーの詳細をログに書く（ファイル・行番号含む）
+        error_trace = traceback.format_exc()
+        logger.exception("未処理の例外が発生しました:\n%s", error_trace)
+
+        # Swagger上で詳細表示
+        return JSONResponse(
+            status_code=500,
+            content={"detail": error_trace}  # ← エラーの詳細なスタックトレース付き
+        )
 
 if __name__ == "__main__":
     import uvicorn
