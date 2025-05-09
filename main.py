@@ -11,7 +11,8 @@ from dateutil import parser
 import mysql.connector
 import pymysql
 from collections import defaultdict
-from openai import OpenAI
+# from openai import OpenAI
+from openai import AzureOpenAI
 import httpx
 from pathlib import Path
 import sys
@@ -36,7 +37,13 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("❌ OPENAI_API_KEY が設定されていません。Azure の構成または .env を確認してください。")
 
-client = OpenAI(api_key=api_key)
+# client = OpenAI(api_key=api_key)
+
+client = AzureOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_version=os.getenv("OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("OPENAI_API_BASE")
+)
 
 app = FastAPI()
 
@@ -243,7 +250,8 @@ async def extract_schedule_positions(
         # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
         chat_response = client.chat.completions.create(
-            model="gpt-4o",
+        #     model="gpt-4o",
+            deployment_id="gpt-4o",
             messages=[
                 {"role": "system", "content": "あなたは貿易実務に詳しい熟練の船便選定アドバイザーです。"},
                 {"role": "user", "content": prompt},
