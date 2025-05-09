@@ -22,10 +22,16 @@ logger = logging.getLogger(__name__)
 logger.info(f"[DEBUG] .env path = {dotenv_path}")
 logger.info(f"[DEBUG] OPENAI_API_KEY = {os.getenv('OPENAI_API_KEY')[:8]}...")
 
-from openai import OpenAI
+# from openai import OpenAI
+from openai import AzureOpenAI
 from playwright.sync_api import sync_playwright
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+client = AzureOpenAI(
+    api_key=os.getenv("OPENAI_API_KEY"),
+    api_version=os.getenv("OPENAI_API_VERSION"),
+    azure_endpoint=os.getenv("OPENAI_API_BASE")
+)
 
 # ChatGPTが出力する英語カテゴリとCOSCOの日本語PDF名の対応表
 region_map = {
@@ -69,7 +75,8 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o",
+            # model="gpt-4o",
+            deployment_id="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
