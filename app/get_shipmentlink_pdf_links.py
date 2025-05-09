@@ -10,11 +10,15 @@ from bs4 import BeautifulSoup
 from openai import AzureOpenAI
 import re
 
+# # .env 読み込み
+# if os.getenv("OPENAI_API_KEY") is None:
+#     from dotenv import load_dotenv
+#     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+#     load_dotenv(dotenv_path)
+
 # .env 読み込み
-if os.getenv("OPENAI_API_KEY") is None:
-    from dotenv import load_dotenv
-    dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
-    load_dotenv(dotenv_path)
+dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
+load_dotenv(dotenv_path)
 
 # ログ設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -63,8 +67,7 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
 """
     try:
         response = client.chat.completions.create(
-            # model="gpt-4o",
-            deployment_name="gpt-4o",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
