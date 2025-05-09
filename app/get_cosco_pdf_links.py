@@ -8,7 +8,6 @@ from unicodedata import normalize
 from openai import AzureOpenAI
 from playwright.sync_api import sync_playwright
 from pathlib import Path
-from urllib.parse import urljoin
 
 # if os.getenv("OPENAI_API_KEY") is None:
 #     from dotenv import load_dotenv
@@ -60,6 +59,7 @@ region_map = {
     "TAIWAN": "台湾サービス（KTX1 / KTX3）"
 }
 
+
 def get_region_by_chatgpt(destination_keyword: str, silent=False):
     prompt = f"""
 あなたは国際物流に詳しいアシスタントです。
@@ -97,10 +97,7 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
     # return result
 
 def normalize_text(s: str) -> str:
-    """ 文字列を正規化して空白を削除 """
-    if not s:
-        return ""
-    return "".join(s.split()).lower()
+    return normalize('NFKC', s).replace(' ', '').replace('　', '').lower()
 
 def get_pdf_links(destination_keyword, silent=False):
     pdf_links = []
@@ -112,58 +109,26 @@ def get_pdf_links(destination_keyword, silent=False):
     if not silent:
         logger.info(f"[INFO] ChatGPTにより得られた日本語カテゴリ名: {region_jp}")
 
-    base_url = "https://world.lines.coscoshipping.com"
-    target_url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
+    url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
+        page.goto(url, timeout=60000)
 
-        # User-Agent 設定
-        page.set_extra_http_headers({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-        })
-
-        page.goto(target_url, timeout=60000)
-
-        # JavaScriptの完了待機 - PDFリンクがレンダリングされるまで待機
-        try:
-            logger.info("[INFO] PDFリンクのレンダリング待機中...")
-            page.wait_for_function(
-                """() => {
-                    return document.querySelectorAll("a[href$='.pdf']").length > 0;
-                }""",
-                timeout=15000
-            )
-        except Exception as e:
-            logger.warning("[WARNING] PDFリンクのレンダリング待機に失敗しました。")
-
-        # リンク取得
-        links = page.query_selector_all("a")
-        logger.info(f"[INFO] リンク数: {len(links)}")
-
+        links = page.query_selector_all("a[href$='.pdf']")
         for link in links:
+            text = link.text_content().strip()
             href = link.get_attribute("href")
-            text = link.text_content()
-        
-            # ✅ デバッグ用ログ出力
-            logger.info(f"[DEBUG] href: {href}, text: '{text}'")
 
-            # 空白および改行を削除して正規化
-            normalized_text = normalize_text(text)
-            normalized_region = normalize_text(region_jp)
-
-            # ✅ hrefがNoneでないことを確認してから処理を続行
-            if href and href.endswith(".pdf"):
-                # 相対URLを絶対URLに変換
-                full_url = urljoin(base_url, href)
-
-                # ✅ 「輸出」または「exp」を含むリンクのみ対象
-                if (
-                    ("輸出" in normalized_text or "exp" in href.lower()) and
-                    normalized_region in normalized_text
-                ):
-                    pdf_links.append(full_url)
+            # ✅ 「輸出」に限定（text または href に「輸出」が含まれているもの）
+            if (
+                ("輸出" in text or "exp" in href.lower()) and
+                normalize_text(region_jp) in normalize_text(text)
+            ):
+                full_url = f"https://world.lines.coscoshipping.com{href}" if href.startswith("/") else href
+                pdf_links.append(full_url)
+                if not silent:
                     logger.info(f"[MATCH] {text} → {full_url}")
 
         browser.close()
