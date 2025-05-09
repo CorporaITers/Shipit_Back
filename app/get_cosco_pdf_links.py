@@ -4,8 +4,11 @@ import os
 import logging
 from dotenv import load_dotenv
 from unicodedata import normalize
-
+# from openai import OpenAI
+from openai import AzureOpenAI
+from playwright.sync_api import sync_playwright
 from pathlib import Path
+from urllib.parse import urljoin
 
 # if os.getenv("OPENAI_API_KEY") is None:
 #     from dotenv import load_dotenv
@@ -21,10 +24,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 logger.info(f"[DEBUG] .env path = {dotenv_path}")
 logger.info(f"[DEBUG] OPENAI_API_KEY = {os.getenv('OPENAI_API_KEY')[:8]}...")
-
-# from openai import OpenAI
-from openai import AzureOpenAI
-from playwright.sync_api import sync_playwright
 
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 client = AzureOpenAI(
@@ -42,25 +41,24 @@ region_map = {
     "EUROPE": "ヨーロッパサービス",
     "MEDITERRANEAN": "地中海サービス",
     "RED SEA": "紅海サービス",
-    "MIDDLE EAST": "中東サービス",
+    "MIDDLE EAST": "中近東サービス",
     "SOUTH AMERICA": "南米東岸・西岸サービス",
     "AFRICA": "アフリカサービス",
 
     # 東南アジア・南アジア
     "KOREA": "韓国（釜山）向けサービス",
     "SOUTH EAST ASIA": "タイ・ベトナム向け直行サービス",
-    "MALAYSIA SINGAPORE INDONESIA": "シンガポール・マレーシア・インドネシア直行サービス",
-    "SOUTH ASIA": "インド・スリランカ向けサービス（上海経由）",
+    "MALAYSIA SINGAPORE INDONESIA": "シンガポール・マレーシア・インドネシア向け直行サービス",
+    "SOUTH ASIA": "インド・スリランカ向けサービス／上海経由",
 
     # 中国・台湾
-    "CHINA FEEDER": "長江流域フィーダーサービス",
+    "CHINA FEEDER": "上海・長江流域フィーダーサービス",
     "NINGBO WENZHOU": "寧波・温州サービス",
     "QINGDAO LIANYUNGANG": "青島・連雲港サービス",
     "XINGANG DALIAN YINGKOU": "新港・大連・営口・威海サービス",
-    "HONGKONG PEARL": "香港・南中国パールリバーサービス",
+    "HONGKONG PEARL": "香港・南中国及びパールリバーデルタフィーダーサービス",
     "TAIWAN": "台湾サービス（KTX1 / KTX3）"
 }
-
 
 def get_region_by_chatgpt(destination_keyword: str, silent=False):
     prompt = f"""
@@ -75,12 +73,11 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
 
     try:
         response = client.chat.completions.create(
-            # model="gpt-4o",
-            deployment_id="gpt-4o",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        result = response.choices[0].message.content.strip().upper()
+        result = response.choices[0].message.content.strip().upper().strip('"')
 
         if not silent:
             logger.info(f"[ChatGPT返答] {result}")
@@ -100,7 +97,10 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
     # return result
 
 def normalize_text(s: str) -> str:
-    return normalize('NFKC', s).replace(' ', '').replace('　', '').lower()
+    """ 文字列を正規化して空白を削除 """
+    if not s:
+        return ""
+    return "".join(s.split()).lower()
 
 def get_pdf_links(destination_keyword, silent=False):
     pdf_links = []
@@ -112,26 +112,58 @@ def get_pdf_links(destination_keyword, silent=False):
     if not silent:
         logger.info(f"[INFO] ChatGPTにより得られた日本語カテゴリ名: {region_jp}")
 
-    url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
+    base_url = "https://world.lines.coscoshipping.com"
+    target_url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         page = browser.new_page()
-        page.goto(url, timeout=60000)
 
-        links = page.query_selector_all("a[href$='.pdf']")
+        # User-Agent 設定
+        page.set_extra_http_headers({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+        })
+
+        page.goto(target_url, timeout=60000)
+
+        # JavaScriptの完了待機 - PDFリンクがレンダリングされるまで待機
+        try:
+            logger.info("[INFO] PDFリンクのレンダリング待機中...")
+            page.wait_for_function(
+                """() => {
+                    return document.querySelectorAll("a[href$='.pdf']").length > 0;
+                }""",
+                timeout=15000
+            )
+        except Exception as e:
+            logger.warning("[WARNING] PDFリンクのレンダリング待機に失敗しました。")
+
+        # リンク取得
+        links = page.query_selector_all("a")
+        logger.info(f"[INFO] リンク数: {len(links)}")
+
         for link in links:
-            text = link.text_content().strip()
             href = link.get_attribute("href")
+            text = link.text_content()
+        
+            # ✅ デバッグ用ログ出力
+            logger.info(f"[DEBUG] href: {href}, text: '{text}'")
 
-            # ✅ 「輸出」に限定（text または href に「輸出」が含まれているもの）
-            if (
-                ("輸出" in text or "exp" in href.lower()) and
-                normalize_text(region_jp) in normalize_text(text)
-            ):
-                full_url = f"https://world.lines.coscoshipping.com{href}" if href.startswith("/") else href
-                pdf_links.append(full_url)
-                if not silent:
+            # 空白および改行を削除して正規化
+            normalized_text = normalize_text(text)
+            normalized_region = normalize_text(region_jp)
+
+            # ✅ hrefがNoneでないことを確認してから処理を続行
+            if href and href.endswith(".pdf"):
+                # 相対URLを絶対URLに変換
+                full_url = urljoin(base_url, href)
+
+                # ✅ 「輸出」または「exp」を含むリンクのみ対象
+                if (
+                    ("輸出" in normalized_text or "exp" in href.lower()) and
+                    normalized_region in normalized_text
+                ):
+                    pdf_links.append(full_url)
                     logger.info(f"[MATCH] {text} → {full_url}")
 
         browser.close()

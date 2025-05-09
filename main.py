@@ -33,9 +33,9 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-api_key = os.getenv("OPENAI_API_KEY")
-if not api_key:
-    raise RuntimeError("❌ OPENAI_API_KEY が設定されていません。Azure の構成または .env を確認してください。")
+# api_key = os.getenv("OPENAI_API_KEY")
+# if not api_key:
+#     raise RuntimeError("❌ OPENAI_API_KEY が設定されていません。Azure の構成または .env を確認してください。")
 
 # client = OpenAI(api_key=api_key)
 
@@ -138,7 +138,7 @@ async def extract_schedule_positions(
     import requests
     import fitz  # PyMuPDF
     from datetime import datetime
-    from openai import OpenAI
+    # from openai import OpenAI
 
     DESTINATION_ALIASES = {
         "New York": ["NEW YORK", "NYC", "NEWYORK", "N.Y.", "NY"],
@@ -250,8 +250,7 @@ async def extract_schedule_positions(
         # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
         chat_response = client.chat.completions.create(
-        #     model="gpt-4o",
-            deployment_id="gpt-4o",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "あなたは貿易実務に詳しい熟練の船便選定アドバイザーです。"},
                 {"role": "user", "content": prompt},
