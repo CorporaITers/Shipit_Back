@@ -3,79 +3,92 @@ import json
 import os
 import logging
 from dotenv import load_dotenv
-from unicodedata import normalize
-# from openai import OpenAI
-from openai import AzureOpenAI
-from playwright.sync_api import sync_playwright
 from pathlib import Path
+from openai import AzureOpenAI
+import re
 
-# if os.getenv("OPENAI_API_KEY") is None:
-#     from dotenv import load_dotenv
-#     dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
-#     load_dotenv(dotenv_path)
-
-# ✅ まず dotenv_path を定義
+# .env 読み込み
 dotenv_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.env'))
 load_dotenv(dotenv_path)
 
-# ログ設定
+# ロガー設定
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 logger.info(f"[DEBUG] .env path = {dotenv_path}")
 logger.info(f"[DEBUG] OPENAI_API_KEY = {os.getenv('OPENAI_API_KEY')[:8]}...")
 
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# OpenAIクライアント初期化
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     api_version=os.getenv("OPENAI_API_VERSION"),
     azure_endpoint=os.getenv("OPENAI_API_BASE")
 )
 
-# ChatGPTが出力する英語カテゴリとCOSCOの日本語PDF名の対応表
+logger.info("[DEBUG] OpenAI client initialized successfully.")
+
+# 地域マッピング（日付部分をワイルドカード化）
 region_map = {
-    # 洋主要基幹航路
-    "AMERICA CANADA": "アメリカ・カナダサービス",
-    "AUSTRALIA": "オーストラリアサービス",
-    "NEW ZEALAND": "ニュージーランドサービス",
-    "EUROPE": "ヨーロッパサービス",
-    "MEDITERRANEAN": "地中海サービス",
-    "RED SEA": "紅海サービス",
-    "MIDDLE EAST": "中近東サービス",
-    "SOUTH AMERICA": "南米東岸・西岸サービス",
-    "AFRICA": "アフリカサービス",
-
-    # 東南アジア・南アジア
-    "KOREA": "韓国（釜山）向けサービス",
-    "SOUTH EAST ASIA": "タイ・ベトナム向け直行サービス",
-    "MALAYSIA SINGAPORE INDONESIA": "シンガポール・マレーシア・インドネシア向け直行サービス",
-    "SOUTH ASIA": "インド・スリランカ向けサービス／上海経由",
-
-    # 中国・台湾
-    "CHINA FEEDER": "上海・長江流域フィーダーサービス",
-    "NINGBO WENZHOU": "寧波・温州サービス",
-    "QINGDAO LIANYUNGANG": "青島・連雲港サービス",
-    "XINGANG DALIAN YINGKOU": "新港・大連・営口・威海サービス",
-    "HONGKONG PEARL": "香港・南中国及びパールリバーデルタフィーダーサービス",
-    "TAIWAN": "台湾サービス（KTX1 / KTX3）"
+    "AMERICA CANADA": [
+        "アメリカ・カナダサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_USA.pdf"]
+    ],
+    "AUSTRALIA": [
+        "オーストラリアサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_AUS.pdf"]
+    ],
+    "NEW ZEALAND": [
+        "ニュージーランドサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_NZ.pdf"]
+    ],
+    "EUROPE": [
+        "ヨーロッパサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_EU.pdf"]
+    ],
+    "MEDITERRANEAN": [
+        "地中海サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_MED.pdf"]
+    ],
+    "CHINA FEEDER": [
+        "上海・長江流域フィーダーサービス", 
+        [
+            "https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_sha_chanjiang_1.pdf",
+            "https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_sha_chanjiang_2.pdf"
+        ]
+    ],
+    "NINGBO WENZHOU": [
+        "寧波・温州サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_nbo.pdf"]
+    ],
+    "QINGDAO LIANYUNGANG": [
+        "青島・連雲港サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_qin_lyg.pdf"]
+    ],
+    "XINGANG DALIAN YINGKOU": [
+        "新港・大連・営口サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_dal_xtg.pdf"]
+    ],
+    "HONGKONG PEARL": [
+        "香港・南中国及びパールリバーデルタサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_schina_jcv.pdf"]
+    ],
+    "TAIWAN": [
+        "台湾サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_tw.pdf"]
+    ]
 }
 
-
-def get_region_by_chatgpt(destination_keyword: str, silent=False):
+def get_region_by_chatgpt(destination_keyword, silent=False):
+    """ ChatGPTを用いて地域カテゴリを判定 """
     prompt = f"""
-あなたは国際物流に詳しいアシスタントです。
-
-以下の目的地「{destination_keyword}」が、COSCO社スケジュールページ（https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1）の**輸出**欄に掲載されているカテゴリのうち、どれに該当するかを判断してください。
-
-次のリストから最も適切なカテゴリを1つ選び、**その英語キー（大文字）だけを1行で出力**してください。説明や記号は不要です。
-
+以下の目的地「{destination_keyword}」は、COSCO社の輸出スケジュールPDFのどの地域カテゴリに該当しますか？
+以下の英語リストから最も適切なものを **1つだけ** 英語で出力してください（他の説明文は不要）：
 ["AMERICA CANADA", "AUSTRALIA", "NEW ZEALAND", "EUROPE", "MEDITERRANEAN", "RED SEA", "MIDDLE EAST", "SOUTH AMERICA", "AFRICA", "KOREA", "SOUTH EAST ASIA", "MALAYSIA SINGAPORE INDONESIA", "SOUTH ASIA", "CHINA FEEDER", "NINGBO WENZHOU", "QINGDAO LIANYUNGANG", "XINGANG DALIAN YINGKOU", "HONGKONG PEARL", "TAIWAN"]
 """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
+            messages=[{"role": "user", "content": prompt}]
         )
         result = response.choices[0].message.content.strip().upper().strip('"')
 
@@ -83,63 +96,45 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
             logger.info(f"[ChatGPT返答] {result}")
 
         if result not in region_map:
-            raise ValueError(f"ChatGPTの返答が不正です: {result}")
+            raise ValueError(f"[ERROR] 不正な地域カテゴリ: {result}")
 
-        return region_map[result]
-    
+        return result
+
     except Exception as e:
-        logger.exception("[ERROR] ChatGPTによる地域判定失敗")
+        logger.exception("[ERROR] ChatGPTによる地域判定に失敗")
         raise
-
-    # result = response.choices[0].message.content.strip()
-    # logger.info(f"[ChatGPT日本語カテゴリ名 判定結果] → '{result}'")
-
-    # return result
-
-def normalize_text(s: str) -> str:
-    return normalize('NFKC', s).replace(' ', '').replace('　', '').lower()
 
 def get_pdf_links(destination_keyword, silent=False):
     pdf_links = []
-    region_jp = get_region_by_chatgpt(destination_keyword, silent=silent)
+    region_key = get_region_by_chatgpt(destination_keyword, silent=silent)
+    region_info = region_map.get(region_key)
 
-    # def normalize_text(s):
-    #     return normalize('NFKC', s).replace(' ', '').replace('　', '').lower()
+    if not region_info:
+        logger.warning(f"[WARNING] 地域カテゴリ '{region_key}' は無効です。")
+        return []
 
-    if not silent:
-        logger.info(f"[INFO] ChatGPTにより得られた日本語カテゴリ名: {region_jp}")
+    region_name, pdf_patterns = region_info
 
-    url = "https://world.lines.coscoshipping.com/japan/jp/services/localschedule/1/1"
+    # URL内の日付部分をワイルドカードとして扱う
+    date_pattern = r"/(\d{8})/"
+    for pattern in pdf_patterns:
+        # 日付部分を削除した比較用URLを生成
+        base_url = re.sub(date_pattern, "/{DATE}/", pattern)
+        logger.info(f"[INFO] 照合用URLパターン: {base_url}")
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(url, timeout=60000)
-
-        links = page.query_selector_all("a[href$='.pdf']")
-        for link in links:
-            text = link.text_content().strip()
-            href = link.get_attribute("href")
-
-            # ✅ 「輸出」に限定（text または href に「輸出」が含まれているもの）
-            if (
-                ("輸出" in text or "exp" in href.lower()) and
-                normalize_text(region_jp) in normalize_text(text)
-            ):
-                full_url = f"https://world.lines.coscoshipping.com{href}" if href.startswith("/") else href
-                pdf_links.append(full_url)
-                if not silent:
-                    logger.info(f"[MATCH] {text} → {full_url}")
-
-        browser.close()
+        # 実際のPDFリンクを生成
+        for date_part in ["20250507", "20250508", "20250509"]:
+            pdf_url = base_url.replace("{DATE}", date_part)
+            pdf_links.append(pdf_url)
+            logger.info(f"[抽出] {pdf_url}")
 
     return pdf_links
 
-
+# エントリポイント
 if __name__ == "__main__":
     try:
         if len(sys.argv) < 2:
-            logger.error("❌ 実行引数が不足しています。使用例: `python get_cosco_pdf_links.py Los Angeles`")
+            logger.error("引数が足りません。")
             print("[]")
             sys.exit(1)
 
@@ -147,12 +142,13 @@ if __name__ == "__main__":
         silent = "--silent" in sys.argv
 
         result = get_pdf_links(keyword, silent=silent)
-        print(json.dumps(result, ensure_ascii=False))  # subprocess用出力
+        print(json.dumps(result, ensure_ascii=False))
 
     except Exception as e:
-        logger.exception("[ERROR] get_cosco_pdf_links実行中に例外:")
-        print("[]")  # subprocess 側で json.loads に失敗させないため
+        logger.exception("[ERROR] get_pdf_links実行中に例外:")
+        print("[]")
         sys.exit(1)
+
 
 
 # BeautifulSoup版のコード（予備）
