@@ -189,7 +189,7 @@ async def extract_schedule_positions(
         logger.info("🔍 PDFを開いてテキスト抽出を開始します。")
         doc = fitz.open("temp_schedule.pdf")
         full_text = "\n".join(page.get_text("text") for page in doc)
-        logger.info("✅ PDFからのテキスト抽出完了。")
+        logger.info(f"✅ PDFからのテキスト抽出完了。")
 
         # エイリアス生成（大文字化して正規化）
         aliases = DESTINATION_ALIASES.get(destination, [destination])
@@ -197,6 +197,12 @@ async def extract_schedule_positions(
 
         # 候補行のみ抽出（日付 + 目的地エイリアスを含む行）
         lines = full_text.splitlines()
+
+        # 行の確認
+        logger.info("🔍 各行の詳細を表示します：")
+        for idx, line in enumerate(lines):
+            logger.info(f"行 {idx + 1}: {repr(line)}")
+
         candidate_lines = set()
         for i in range(len(lines)):
             line_upper = lines[i].upper()
@@ -208,6 +214,9 @@ async def extract_schedule_positions(
         condensed_text = "\n".join(candidate_lines)
         if len(condensed_text) > 4096:
             condensed_text = condensed_text[:4096]  # GPT-4oのトークン制限に対応
+        
+        # コンソールに condensed_text を出力
+        logger.info(f"✅ Condensed Text:\n{condensed_text}")
 
         prompt = f"""
 以下はPDFから抽出されたスケジュール候補の行です。
