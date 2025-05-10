@@ -109,14 +109,14 @@ async def root():
 class ShippingRequest(BaseModel):
     departure_port: str
     destination_port: str
-    eta_date: Optional[str] = None
     etd_date: Optional[str] = None
+    eta_date: Optional[str] = None
 
 class ScheduleRequest(BaseModel):
     departure_port: str
     destination_port: str
-    eta_date: Optional[str]
     etd_date: Optional[str]
+    eta_date: Optional[str]
 
 class FeedbackRequest(BaseModel):
     url: str
@@ -128,8 +128,8 @@ async def extract_schedule_positions(
     url: str,
     departure: str,
     destination: str,
-    eta_date: datetime = None,
-    etd_date: datetime = None
+    etd_date: datetime = None,
+    eta_date: datetime = None
 ):
     import os
     import csv
@@ -187,10 +187,10 @@ async def extract_schedule_positions(
         "Port Kelang": ["PORT KELANG", "PORTKLANG"],  # 通称違い対応
     }
 
-    if not eta_date and not etd_date:
-        return {"error": "ETAかETDのいずれかを指定してください。"}
+    if not etd_date and not eta_date:
+        return {"error": "ETDかETAのいずれかを指定してください。"}
 
-    base_date = eta_date or etd_date
+    base_date = etd_date or eta_date
 
     # PDFをダウンロード
     logger.info(f"📥 PDFリンクにアクセス中: {url}")
@@ -235,7 +235,8 @@ async def extract_schedule_positions(
 目的地「{destination}」（別名: {', '.join(aliases)}）に関連する、
 最も{base_date.strftime('%m/%d')}に近いスケジュール（船名・ETD・ETA）を1件だけ抽出してください。
 
-出発地または目的地が明確に分かる場合は、該当する日付（ETD/ETA）も必ず抽出してください。
+出港地「{departure}」または目的地「{destination}」が明確に分かる場合は、該当する日付（ETD/ETA）も必ず抽出してください。
+ETDは出港地「{departure}」を出発する日付を抽出してください。
 
 出力形式（必ずJSON形式）:
 {{
@@ -274,8 +275,8 @@ async def extract_schedule_positions(
 
         try:
             info = json.loads(match.group())
-            eta_date_str = info.get("eta")
             etd_date_str = info.get("etd")
+            eta_date_str = info.get("eta")
             vessel = info.get("vessel")
 
             log_path = "gpt_feedback_log.csv"
@@ -564,17 +565,18 @@ async def recommend_shipping(req: ShippingRequest):
     logger.info("📦 リクエスト受信:")
     logger.info(f"  Departure Port: {req.departure_port}")
     logger.info(f"  Destination Port: {req.destination_port}")
-    logger.info(f"  ETA: {req.eta_date}")
     logger.info(f"  ETD: {req.etd_date}")
+    logger.info(f"  ETA: {req.eta_date}")
 
-    if not req.eta_date and not req.etd_date:
-        return {"error": "ETAかETDのいずれかを指定してください。"}
+    if not req.etd_date and not req.eta_date:
+        return {"error": "ETDかETAのいずれかを指定してください。"}
 
     destination = req.destination_port
     departure = req.departure_port
     keyword = destination
-    eta_date = datetime.strptime(req.eta_date, "%Y-%m-%d") if req.eta_date else None
     etd_date = datetime.strptime(req.etd_date, "%Y-%m-%d") if req.etd_date else None
+    eta_date = datetime.strptime(req.eta_date, "%Y-%m-%d") if req.eta_date else None
+ 
 
     results = []
 
@@ -589,8 +591,8 @@ async def recommend_shipping(req: ShippingRequest):
                 url=pdf_url,
                 departure=departure,
                 destination=destination,
-                eta_date=eta_date,
-                etd_date=etd_date
+                etd_date=etd_date,
+                eta_date=eta_date
             )
             if result:
                 result["company"] = "ONE"
@@ -610,8 +612,8 @@ async def recommend_shipping(req: ShippingRequest):
                 url=pdf_url,
                 departure=departure,
                 destination=destination,
-                eta_date=eta_date,
-                etd_date=etd_date
+                etd_date=etd_date,
+                eta_date=eta_date
             )
             if result:
                 result["company"] = "COSCO"
@@ -632,8 +634,8 @@ async def recommend_shipping(req: ShippingRequest):
                     url=pdf_url,
                     departure=departure,
                     destination=destination,
-                    eta_date=eta_date,
-                    etd_date=etd_date
+                    etd_date=etd_date,
+                    eta_date=eta_date
                 )
                 if result:
                     result["company"] = "KINKA"
@@ -657,8 +659,8 @@ async def recommend_shipping(req: ShippingRequest):
                 url=pdf_url,
                 departure=departure,
                 destination=destination,
-                eta_date=eta_date,
-                etd_date=etd_date
+                etd_date=etd_date,
+                eta_date=eta_date
             )
             if result:
                 result["company"] = "Shipmentlink"
