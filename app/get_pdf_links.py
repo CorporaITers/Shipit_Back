@@ -159,7 +159,7 @@ region_map = {
     "EUROPE MEDITERRANEAN": "地中海輸出",
     "EAST ASIA": "中国・香港・海峡地・インドネシア輸出",
     "SOUTHEAST ASIA": "タイ・ベトナム・韓国・台湾・フィリピン輸出",
-    "MIDDLE EAST": "中東・南アジア輸出",
+    "MIDDLE EAST": "西アジア_中東輸出",
     "SOUTH AMERICA WEST COAST": "南米西岸輸出",
     "SOUTH AMERICA EAST COAST": "南米東岸輸出",
     "AFRICA": "アフリカ輸出",
