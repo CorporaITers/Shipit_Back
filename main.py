@@ -20,6 +20,8 @@ from urllib.parse import unquote
 from dotenv import load_dotenv
 import traceback
 from fastapi.responses import JSONResponse
+import camelot
+import warnings
 
 # ローカル用 .env 読み込み（Azure環境では無視される）
 load_dotenv()
@@ -32,6 +34,13 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# pdfminerのログレベルをERRORに設定
+for logger_name in ["pdfminer", "pdfminer.layout", "pdfminer.converter", "pdfminer.pdfinterp"]:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+# "Cannot set gray non-stroke color" の警告を抑制
+warnings.filterwarnings("ignore", message="Cannot set gray non-stroke color")
 
 # api_key = os.getenv("OPENAI_API_KEY")
 # if not api_key:
@@ -63,7 +72,6 @@ DB_CONFIG = {
     "password": os.getenv("MYSQL_PASSWORD", "tech0-dtxdb"),
     "database": "corporaiters"
 }
-
 
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)
@@ -131,12 +139,13 @@ async def extract_schedule_positions(
     etd_date: datetime = None,
     eta_date: datetime = None
 ):
+    
     import os
     import csv
     import json
     import re
     import requests
-    import fitz  # PyMuPDF
+    # import fitz  # PyMuPDF
     from datetime import datetime
     # from openai import OpenAI
 
@@ -207,37 +216,86 @@ async def extract_schedule_positions(
 
     doc = None
     try:
-        logger.info("🔍 PDFを開いてテキスト抽出を開始します。")
-        doc = fitz.open("temp_schedule.pdf")
-        full_text = "\n".join(page.get_text("text") for page in doc)
-        logger.info(f"✅ PDFからのテキスト抽出完了。")
+        # logger.info("🔍 PDFを開いてテキスト抽出を開始します。")
+        # doc = fitz.open("temp_schedule.pdf")
+        # full_text = "\n".join(page.get_text("text") for page in doc)
+        # logger.info(f"✅ PDFからのテキスト抽出完了。")
 
         # エイリアス生成（大文字化して正規化）
         aliases = DESTINATION_ALIASES.get(destination, [destination])
         aliases = [a.upper() for a in aliases]
 
-        # 候補行のみ抽出（日付 + 目的地エイリアスを含む行）
-        lines = full_text.splitlines()
+        # # 候補行のみ抽出（日付 + 目的地エイリアスを含む行）
+        # lines = full_text.splitlines()
 
-        # 行の確認
-        logger.info("🔍 各行の詳細を表示します：")
-        for idx, line in enumerate(lines):
-            logger.info(f"行 {idx + 1}: {repr(line)}")
+        # # 行の確認
+        # logger.info("🔍 各行の詳細を表示します：")
+        # for idx, line in enumerate(lines):
+        #     logger.info(f"行 {idx + 1}: {repr(line)}")
 
-        candidate_lines = set()
-        for i in range(len(lines)):
-            line_upper = lines[i].upper()
-            if re.search(r'\d{1,2}/\d{1,2}', line_upper) and any(alias in line_upper for alias in aliases):
-                block = lines[max(0, i - 2):min(len(lines), i + 3)]
-                candidate_lines.update(block)
+        # candidate_lines = set()
+        # for i in range(len(lines)):
+        #     line_upper = lines[i].upper()
+        #     if re.search(r'\d{1,2}/\d{1,2}', line_upper) and any(alias in line_upper for alias in aliases):
+        #         block = lines[max(0, i - 2):min(len(lines), i + 3)]
+        #         candidate_lines.update(block)
 
-        # トークン削減のため、文字数制限（例: 4096文字）
-        condensed_text = "\n".join(candidate_lines)
-        if len(condensed_text) > 4096:
-            condensed_text = condensed_text[:4096]  # GPT-4oのトークン制限に対応
+        # # トークン削減のため、文字数制限（例: 4096文字）
+        # condensed_text = "\n".join(candidate_lines)
+        # if len(condensed_text) > 4096:
+        #     condensed_text = condensed_text[:4096]  # GPT-4oのトークン制限に対応
         
-        # コンソールに condensed_text を出力
-        logger.info(f"✅ Condensed Text:\n{condensed_text}")
+        # # コンソールに condensed_text を出力
+        # logger.info(f"✅ Condensed Text:\n{condensed_text}")
+
+        # Camelotでテーブル抽出
+        tables = camelot.read_pdf("temp_schedule.pdf", pages="all", flavor="stream")
+        logger.info(f"抽出されたテーブル数: {len(tables)}")
+        # closest_entry = None
+        # closest_diff = float("inf")
+
+        # テーブルデータを文字列形式に変換
+        table_data = ""
+        for i, table in enumerate(tables):
+            table_data += f"\n--- テーブル {i + 1} ---\n"
+            table_data += table.df.to_string()
+
+        logger.info(f"抽出データ:\n{table_data}")
+
+        # for table in tables:
+        #     df = table.df
+        #     for i in range(len(df)):
+        #         row = df.iloc[i]
+        #         try:
+        #             vessel = row[0].strip()
+        #             etd = row[1].strip()
+        #             eta = row[2].strip()
+        #             dep_port = row[3].strip()
+        #             dest_port = row[4].strip()
+
+    #                 # 対象の航路をフィルタリング
+    #                 if dep_port.upper() == departure.upper() and any(alias in dest_port.upper() for alias in DESTINATION_ALIASES[destination]):
+    #                     etd_date_obj = datetime.strptime(etd, "%m/%d") if etd else None
+    #                     eta_date_obj = datetime.strptime(eta, "%m/%d") if eta else None
+
+    #                     # 出発日と到着日を比較して最も近いものを選定
+    #                     for date_obj in [etd_date_obj, eta_date_obj]:
+    #                         if date_obj:
+    #                             diff = abs((date_obj - base_date).days)
+    #                             if diff < closest_diff:
+    #                                 closest_diff = diff
+    #                                 closest_entry = {
+    #                                     "vessel": vessel,
+    #                                     "etd": etd,
+    #                                     "eta": eta
+    #                                 }
+    #             except Exception:
+    #                 continue
+
+    #     return closest_entry if closest_entry else {"error": "該当する航路が見つかりませんでした。"}
+
+    # finally:
+    #     os.remove("temp_schedule.pdf")
 
         prompt = f"""
 以下はPDFから抽出されたスケジュール候補の行です。
@@ -253,7 +311,7 @@ async def extract_schedule_positions(
   "eta": "MM/DD"
 }}
 ---
-{full_text}
+{table_data}
 """
 
         # client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -322,7 +380,7 @@ async def extract_schedule_positions(
     except Exception as e:
         # import logging
         # logger = logging.getLogger(__name__)
-        logger.error(f"PyMuPDF解析失敗: {e}")
+        logger.error(f"PDF解析失敗: {e}")
         return None
 
     finally:
