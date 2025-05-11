@@ -734,6 +734,7 @@ async def recommend_shipping(req: ShippingRequest):
     # if maersk_result:
     #     for r in maersk_result:
     #         r["company"] = "Maersk"
+    #         result["fare"] = get_freight_rate(departure, destination, "Maersk")
     #         results.append(r)
     #     logger.info(f"[Maersk API 成功] {len(maersk_result)} 件取得")
 
