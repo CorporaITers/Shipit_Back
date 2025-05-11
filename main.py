@@ -302,9 +302,10 @@ async def extract_schedule_positions(
 出発地「{departure}」と目的地「{destination}」（別名: {', '.join(aliases)}）に関連する、
 最も{base_date.strftime('%m/%d')}に近いスケジュール（船名・航海番号・ETD・ETA）を1件だけ抽出してください。
 
-その抽出した1件が「1st Vessel」や「2nd Vessel」など複数の船名および航海番号を有する場合は、1st Vesselの船名および航海番号を出力してください）
+その抽出したスケジュールが複数の船名を有するかどうかを確認し、もし有する場合は1st Vesselの船名を選択してください。
+（有しない場合はそのままの船名を選択してください）
 
-なお、出港日{etd_date}は出発地の日付を基準に、到着日{eta_date}は目的地の日付を基準として、結果を出力してください。
+なお、出港日{etd_date}は出発地「{departure}」の日付を基準に、到着日{eta_date}は目的地「{destination}」の日付を基準として、結果を出力してください。
 
 出力形式（必ずJSON形式）:
 {{
