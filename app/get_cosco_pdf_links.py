@@ -48,6 +48,38 @@ region_map = {
         "地中海サービス", 
         ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_MED.pdf"]
     ],
+    "RED SEA": [
+        "紅海サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_RED.pdf"]
+    ],
+    "MIDDLE EAST": [
+        "中近東サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_PG.pdf"]
+    ],
+    "SOUTH AMERICA": [
+        "南米東岸・西岸サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_SOUTH_AMERICA.pdf"]
+    ],
+    "AFRICA": [
+        "アフリカサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/EXP_Africa.pdf"]
+    ],
+    "KOREA": [
+        "韓国（釜山）向けサービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_kor.pdf"]
+    ],
+    "SOUTH EAST ASIA": [
+        "タイ・ベトナム向け直行サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_s_asia_direct_new_1.pdf"]
+    ],
+    "MALAYSIA SINGAPORE INDONESIA": [
+        "シンガポール・マレーシア・インドネシア向け直行サービス", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_s_asia_direct_new_2.pdf"]
+    ],
+    "SOUTH ASIA": [
+        "東南アジア・南アジア向けサービス・シンガポール経由", 
+        ["https://world.lines.coscoshipping.com/lines_resource/local/japan/defaultContentAttachment/{DATE}/exp_s_asia_direct_new_3.pdf"]
+    ],
     "CHINA FEEDER": [
         "上海・長江流域フィーダーサービス", 
         [

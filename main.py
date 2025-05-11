@@ -150,7 +150,7 @@ async def extract_schedule_positions(
     # from openai import OpenAI
 
     DESTINATION_ALIASES = {
-        "New York": ["NEW YORK", "NYC", "NEWYORK", "N.Y.", "NY"],
+        "New York": ["NEW YORK", "NYC", "NEWYORK", "N.Y.", "NY", "NYO"],
         "Los Angeles": ["LOS ANGELES", "LA", "L.A."],
         "Rotterdam": ["ROTTERDAM"],
         "Hamburg": ["HAMBURG"],
@@ -186,7 +186,7 @@ async def extract_schedule_positions(
         "Xiamen": ["XIAMEN"],
         "Qingdao": ["QINGDAO", "TSINGTAO"],
         "Dalian": ["DALIAN"],
-        "Shanghai": ["SHANGHAI"],
+        "Shanghai": ["SHANGHAI", "SHA"],
         "Ningbo": ["NINGBO"],
         "Shekou": ["SHEKOU"],
         "Yantian": ["YANTIAN", "YTN"],
@@ -299,17 +299,22 @@ async def extract_schedule_positions(
 
         prompt = f"""
 以下はPDFから抽出されたスケジュール候補の行です。
-目的地「{destination}」（別名: {', '.join(aliases)}）に関連する、
-最も{base_date.strftime('%m/%d')}に近いスケジュール（船名・ETD・ETA）を1件だけ抽出してください。
+出発地「{departure}」と目的地「{destination}」（別名: {', '.join(aliases)}）に関連する、
+最も{base_date.strftime('%m/%d')}に近いスケジュール（船名・航海番号・ETD・ETA）を1件だけ抽出してください。
 
-出発地または目的地が明確に分かる場合は、該当する日付（ETD/ETA）も必ず抽出してください。
+その抽出した1件が「1st Vessel」や「2nd Vessel」など複数の船名および航海番号を有する場合は、1st Vesselの船名および航海番号を出力してください）
+
+なお、出港日{etd_date}は出発地の日付を基準に、到着日{eta_date}は目的地の日付を基準として、結果を出力してください。
 
 出力形式（必ずJSON形式）:
 {{
   "vessel": "船名",
+  "voy": "航海番号",
   "etd": "MM/DD または MM/DD - MM/DD",
   "eta": "MM/DD"
 }}
+
+なぜそのスケジュールを選択したのか、理由も簡潔に出力してください。
 ---
 {table_data}
 """
@@ -333,6 +338,7 @@ async def extract_schedule_positions(
                 "error": "ChatGPTの返答がJSON形式で含まれていません", 
                 "raw_response": reply_text,
                 "vessel": "",
+                "voy": "",
                 "etd": "",
                 "eta": "",
                 "fare": "",
@@ -344,6 +350,12 @@ async def extract_schedule_positions(
             etd_date_str = info.get("etd")
             eta_date_str = info.get("eta")
             vessel = info.get("vessel")
+            voyage = info.get("voy")
+            company = info.get("company")  # ✅ JSON内の "company" を取得
+
+            # デフォルト値の設定（companyが取得できない場合）
+            if not company:
+                company = "Unknown"
 
             log_path = "gpt_feedback_log.csv"
             new_entry = [
@@ -355,6 +367,8 @@ async def extract_schedule_positions(
                 etd_date_str,
                 eta_date_str,
                 vessel,
+                voyage,
+                company,  # ✅ company を保存
                 "pending"
             ]
 
@@ -362,15 +376,16 @@ async def extract_schedule_positions(
             with open(log_path, "a", newline='', encoding='utf-8') as log_file:
                 writer = csv.writer(log_file)
                 if not file_exists:
-                    writer.writerow(["timestamp", "url", "departure", "destination", "input_date", "etd", "eta", "vessel", "feedback"])
+                    writer.writerow(["timestamp", "url", "departure", "destination", "input_date", "etd", "eta", "vessel", "voy", "company", "feedback"])
                 writer.writerow(new_entry)
 
             return {
-                "company": "ONE",
+                "company": company,  # ✅ JSON内の "company" を返す,
                 "fare": "$",
                 "etd": etd_date_str,
                 "eta": eta_date_str,
                 "vessel": vessel,
+                "voy": voyage,
                 "schedule_url": url,
                 "raw_response": reply_text
             }
@@ -514,69 +529,69 @@ async def get_pdf_links_from_shipmentlink(departure_port: str, destination_port:
         logger.error(f"[Shipmentlink取得失敗] {e}")
         return []
 
-# FastAPI 内の非同期関数
-async def get_schedule_from_maersk(departure: str, destination: str, etd_date: str) -> list[dict]:
-    try:
-        api_key = os.getenv("MAERSK_API_KEY")  # 環境変数から取得
-        if not api_key:
-            raise Exception("MAERSK_API_KEY が未設定です")
+# # FastAPI 内の非同期関数
+# async def get_schedule_from_maersk(departure: str, destination: str, etd_date: str) -> list[dict]:
+#     try:
+#         api_key = os.getenv("MAERSK_API_KEY")  # 環境変数から取得
+#         if not api_key:
+#             raise Exception("MAERSK_API_KEY が未設定です")
 
-        # UN/LOCODE対応（例: Tokyo -> JP, Los Angeles -> US）
-        ORIGIN_CODE_MAP = {
-            "Tokyo": ("JP", "Tokyo"),
-            "Shanghai": ("CN", "Shanghai")
-        }
-        DEST_CODE_MAP = {
-            "Los Angeles": ("US", "Los Angeles"),
-            "Long Beach": ("US", "Long Beach")
-        }
+#         # UN/LOCODE対応（例: Tokyo -> JP, Los Angeles -> US）
+#         ORIGIN_CODE_MAP = {
+#             "Tokyo": ("JP", "Tokyo"),
+#             "Shanghai": ("CN", "Shanghai")
+#         }
+#         DEST_CODE_MAP = {
+#             "Los Angeles": ("US", "Los Angeles"),
+#             "Long Beach": ("US", "Long Beach")
+#         }
 
-        origin_country, origin_city = ORIGIN_CODE_MAP.get(departure, (None, None))
-        dest_country, dest_city = DEST_CODE_MAP.get(destination, (None, None))
+#         origin_country, origin_city = ORIGIN_CODE_MAP.get(departure, (None, None))
+#         dest_country, dest_city = DEST_CODE_MAP.get(destination, (None, None))
 
-        if not origin_country or not dest_country:
-            raise Exception(f"都市コード未対応: {departure} / {destination}")
+#         if not origin_country or not dest_country:
+#             raise Exception(f"都市コード未対応: {departure} / {destination}")
 
-        # APIエンドポイントとパラメータ
-        url = "https://api.maersk.com/products/ocean-products"
-        params = {
-            "vesselOperatorCarrierCode": "MAEU",
-            "collectionOriginCountryCode": origin_country,
-            "collectionOriginCityName": origin_city,
-            "deliveryDestinationCountryCode": dest_country,
-            "deliveryDestinationCityName": dest_city,
-        }
+#         # APIエンドポイントとパラメータ
+#         url = "https://api.maersk.com/products/ocean-products"
+#         params = {
+#             "vesselOperatorCarrierCode": "MAEU",
+#             "collectionOriginCountryCode": origin_country,
+#             "collectionOriginCityName": origin_city,
+#             "deliveryDestinationCountryCode": dest_country,
+#             "deliveryDestinationCityName": dest_city,
+#         }
 
-        headers = {
-            "Consumer-Key": api_key,
-            "Accept": "application/json"
-        }
+#         headers = {
+#             "Consumer-Key": api_key,
+#             "Accept": "application/json"
+#         }
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers, params=params, timeout=30.0)
+#         async with httpx.AsyncClient() as client:
+#             response = await client.get(url, headers=headers, params=params, timeout=30.0)
 
-        if response.status_code == 200:
-            data = response.json()
+#         if response.status_code == 200:
+#             data = response.json()
 
-            # 必要なフィールドのみ抽出して整形
-            # ※下記はサンプル構成で、実際のレスポンスに合わせて調整必要
-            results = []
-            for item in data.get("schedules", []):
-                results.append({
-                    "vessel": item.get("vesselName"),
-                    "etd": item.get("departureDate"),
-                    "eta": item.get("arrivalDate"),
-                    "service": item.get("serviceName"),
-                })
+#             # 必要なフィールドのみ抽出して整形
+#             # ※下記はサンプル構成で、実際のレスポンスに合わせて調整必要
+#             results = []
+#             for item in data.get("schedules", []):
+#                 results.append({
+#                     "vessel": item.get("vesselName"),
+#                     "etd": item.get("departureDate"),
+#                     "eta": item.get("arrivalDate"),
+#                     "service": item.get("serviceName"),
+#                 })
 
-            return results
-        else:
-            logger.warning(f"Maersk APIエラー: {response.status_code} - {response.text}")
-            return []
+#             return results
+#         else:
+#             logger.warning(f"Maersk APIエラー: {response.status_code} - {response.text}")
+#             return []
 
-    except Exception as e:
-        logger.error(f"[Maersk API取得例外] {str(e)}")
-        return []
+#     except Exception as e:
+#         logger.error(f"[Maersk API取得例外] {str(e)}")
+#         return []
 
 # Hapag-Lloydのスケジュール取得関数を追加
 # async def get_schedule_from_hapaglloyd(departure: str, destination: str) -> list[dict]:
@@ -738,8 +753,8 @@ async def recommend_shipping(req: ShippingRequest):
         if not success:
             logger.warning("⚠️ Shipmentlink社のスケジュール抽出に失敗しました。")
 
-    # ========== Maersk社 ========== 
-    maersk_result = await get_schedule_from_maersk(departure, destination, etd_date=req.etd_date)
+    # # ========== Maersk社 ========== 
+    # maersk_result = await get_schedule_from_maersk(departure, destination, etd_date=req.etd_date)
 
     if maersk_result:
         for r in maersk_result:
