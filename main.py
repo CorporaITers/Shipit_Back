@@ -731,12 +731,12 @@ async def recommend_shipping(req: ShippingRequest):
     # # ========== Maersk社 ========== 
     # maersk_result = await get_schedule_from_maersk(departure, destination, etd_date=req.etd_date)
 
-    if maersk_result:
-        for r in maersk_result:
-            r["company"] = "Maersk"
-            result["fare"] = get_freight_rate(departure, destination, "Maersk")
-            results.append(r)
-        logger.info(f"[Maersk API 成功] {len(maersk_result)} 件取得")
+    # if maersk_result:
+    #     for r in maersk_result:
+    #         r["company"] = "Maersk"
+    #         result["fare"] = get_freight_rate(departure, destination, "Maersk")
+    #         results.append(r)
+    #     logger.info(f"[Maersk API 成功] {len(maersk_result)} 件取得")
 
     # ========== Hapag-Lloyd社 ========== 
     # try:
