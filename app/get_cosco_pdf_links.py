@@ -15,13 +15,14 @@ load_dotenv(dotenv_path)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 logger.info(f"[DEBUG] .env path = {dotenv_path}")
-logger.info(f"[DEBUG] OPENAI_API_KEY = {os.getenv('OPENAI_API_KEY')[:8]}...")
+api_key = os.getenv('OPENAI_API_KEY')
+logger.info(f"[DEBUG] OPENAI_API_KEY = {api_key[:8]}..." if api_key else "[DEBUG] OPENAI_API_KEY is not set.")
 
 # OpenAIクライアント初期化
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     api_version=os.getenv("OPENAI_API_VERSION"),
-    azure_endpoint=os.getenv("OPENAI_API_BASE")
+    azure_endpoint=os.getenv("OPENAI_API_BASE") or ""
 )
 
 logger.info("[DEBUG] OpenAI client initialized successfully.")
@@ -122,7 +123,11 @@ def get_region_by_chatgpt(destination_keyword, silent=False):
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}]
         )
-        result = response.choices[0].message.content.strip().upper().strip('"')
+        
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("ChatGPTの返答が空です")
+        result = content.strip().upper().strip('"')
 
         if not silent:
             logger.info(f"[ChatGPT返答] {result}")

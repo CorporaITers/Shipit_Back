@@ -126,7 +126,8 @@ import logging
 from dotenv import load_dotenv
 from pathlib import Path
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
+from typing import cast
 # from openai import OpenAI
 from openai import AzureOpenAI
 
@@ -138,14 +139,15 @@ load_dotenv(dotenv_path)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 logger.info(f"[DEBUG] .env path = {dotenv_path}")
-logger.info(f"[DEBUG] OPENAI_API_KEY = {os.getenv('OPENAI_API_KEY')[:8]}...")
+api_key = os.getenv('OPENAI_API_KEY')
+logger.info(f"[DEBUG] OPENAI_API_KEY = {api_key[:8]}..." if api_key else "[DEBUG] OPENAI_API_KEY is not set.")
 
 # OpenAIクライアント初期化
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     api_version=os.getenv("OPENAI_API_VERSION"),
-    azure_endpoint=os.getenv("OPENAI_API_BASE")
+    azure_endpoint=os.getenv("OPENAI_API_BASE") or ""
 )
 
 logger.info("[DEBUG] OpenAI client initialized successfully.")
@@ -178,7 +180,10 @@ def get_region_by_chatgpt(destination_keyword, silent=False):
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
         )
-        result = response.choices[0].message.content.strip().upper().strip('"')
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("ChatGPTの返答が空です")
+        result = content.strip().upper().strip('"')
 
         if not silent:
             logger.info(f"[ChatGPT返答] {result}")
@@ -214,11 +219,13 @@ def get_pdf_links(destination_keyword, silent=False):
     links = soup.find_all("a", href=True)
 
     for link in links:
-        href = link["href"]
-        text = link.get_text(strip=True)
+    # `link` を `Tag` 型として明示
+        tag = cast(Tag, link)
+        href = tag.get("href", "N/A")  # ✅ `get()` メソッドが使えるようになる
+        text = tag.get_text(strip=True)
 
-        if href.endswith(".pdf") and region in text:
-            full_url = f"https://jp.one-line.com{href}" if href.startswith("/") else href
+        if str(href).endswith(".pdf") and region in text:
+            full_url = f"https://jp.one-line.com{href}" if str(href).startswith("/") else href
             pdf_links.append(full_url)
             if not silent:
                 logger.info(f"[抽出] {text} -> {full_url}")

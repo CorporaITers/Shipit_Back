@@ -577,6 +577,7 @@ async def get_pdf_links_from_kinka(destination_keyword: str) -> list[str]:
 
 # ShipmentlinkのPDFリンク取得用
 async def get_pdf_links_from_shipmentlink(departure_port: str, destination_port: str) -> list[str]:
+    result = None  # 初期化
     try:
         script_path = Path(__file__).resolve().parent / "app" / "get_shipmentlink_pdf_links.py"
         cwd_path = script_path.parent
