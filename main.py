@@ -735,6 +735,7 @@ async def recommend_shipping(req: ShippingRequest):
             )
             if result:
                 result["company"] = "ONE"
+                result["fare"] = get_freight_rate(departure, destination, "ONE")  # ← 追加
                 results.append(result)
                 logger.info(f"[ONE社マッチ] {result}")
                 break  # 最初のマッチで止める
@@ -755,6 +756,7 @@ async def recommend_shipping(req: ShippingRequest):
             )
             if result:
                 result["company"] = "COSCO"
+                result["fare"] = get_freight_rate(departure, destination, "COSCO")
                 results.append(result)
                 logger.info(f"[COSCO社マッチ] {result}")
                 break  # 最初のマッチで止める
@@ -776,6 +778,7 @@ async def recommend_shipping(req: ShippingRequest):
                 )
                 if result:
                     result["company"] = "KINKA"
+                    result["fare"] = get_freight_rate(departure, destination, "KINKA")
                     results.append(result)
                     logger.info(f"[KINKA社マッチ] {result}")
                     break  # 最初のマッチで止める
@@ -800,6 +803,7 @@ async def recommend_shipping(req: ShippingRequest):
             )
             if result:
                 result["company"] = "Shipmentlink"
+                result["fare"] = get_freight_rate(departure, destination, "Shipmentlink")
                 results.append(result)
                 logger.info(f"[Shipmentlink社マッチ] {result}")
                 success = True
