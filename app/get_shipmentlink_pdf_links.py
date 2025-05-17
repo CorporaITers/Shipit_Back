@@ -5,7 +5,7 @@ import logging
 from dotenv import load_dotenv
 from pathlib import Path
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 # from openai import OpenAI
 from openai import AzureOpenAI
 import re
@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     api_version=os.getenv("OPENAI_API_VERSION"),
-    azure_endpoint=os.getenv("OPENAI_API_BASE")
+    azure_endpoint=os.getenv("OPENAI_API_BASE") or ""
 )
 
 # 出発港 → locコードマッピング
@@ -71,7 +71,12 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
             messages=[{"role": "user", "content": prompt}],
             temperature=0
         )
-        result = response.choices[0].message.content.strip().upper().strip('"')
+
+        content = response.choices[0].message.content
+        if content is None:
+            raise ValueError("ChatGPTの返答が空です")
+        result = content.strip().upper().strip('"')
+        
         if result not in destination_region_map:
             raise ValueError(f"ChatGPTの返答が不正です: {result}")
         if not silent:
@@ -83,6 +88,8 @@ def get_region_by_chatgpt(destination_keyword: str, silent=False):
 
 
 def get_pdf_links(departure_port: str, destination_port: str, silent=False):
+    href = ""  # ✅ 事前に初期化
+    text = ""  # ✅ 事前に初期化
     dep_code = departure_port_map.get(departure_port.title())
     if not dep_code:
         logger.error(f"出発港 '{departure_port}' に対応するコードが見つかりません")
@@ -111,21 +118,23 @@ def get_pdf_links(departure_port: str, destination_port: str, silent=False):
 
     response = session.get(url_result, params=params, headers=headers)
     logger.info(f"[DEBUG] HTTP status: {response.status_code}")
-    soup = BeautifulSoup(response.text, "html.parser")
 
     pdf_links = []
 
+    soup = BeautifulSoup(response.text, "html.parser")
+
     for link in soup.find_all("a", href=True):
-        text = link.get_text(strip=True)
-        href = link.get("href", "")
+        if isinstance(link, Tag):
+            text = link.get_text(strip=True)
+            href = link.get("href", "")
     
         # 正規化処理：GoWin形式や相対パスを含むPDFリンクを正しく変換
-        match = re.search(r"GoWin\('(.+?\.pdf)'\)", href)
+        match = re.search(r"GoWin\('(.+?\.pdf)'\)", str(href))
         if match:
             pdf_path = match.group(1)
             full_url = f"https://www.shipmentlink.com{pdf_path}"
-        elif href.lower().endswith(".pdf"):
-            full_url = "https://www.shipmentlink.com" + href if href.startswith("/") else href
+        elif str(href).lower().endswith(".pdf"):
+            full_url = "https://www.shipmentlink.com" + str(href) if str(href).startswith("/") else str(href)
         else:
             continue  # PDFでない場合スキップ
     
