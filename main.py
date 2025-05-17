@@ -5,10 +5,11 @@ from datetime import datetime, timedelta
 import os
 import json
 import subprocess
-from typing import Optional
+from typing import Optional, Dict, Any, cast
 import logging
 from dateutil import parser
 import mysql.connector
+from decimal import Decimal
 import pymysql
 from collections import defaultdict
 # from openai import OpenAI
@@ -80,11 +81,15 @@ def format_date(date_obj: Optional[datetime]) -> str:
     """ 日付オブジェクトを 'YYYY-MM-DD' 形式の文字列に変換 """
     return date_obj.strftime("%Y-%m-%d") if date_obj else "N/A"
 
-# 🔽 この下に追加
+# 🔽 この下に修正済みの関数を追加
 def get_freight_rate(departure_port: str, destination_port: str, shipping_company: str) -> Optional[float]:
+    """
+    運賃レートを取得して float 型で返す。取得できない場合は None を返す。
+    """
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
+
         query = """
             SELECT freight_rate_usd
             FROM faredate
@@ -92,13 +97,22 @@ def get_freight_rate(departure_port: str, destination_port: str, shipping_compan
             LIMIT 1;
         """
         cursor.execute(query, (departure_port, destination_port, shipping_company))
-        row = cursor.fetchone()
+        row = cast(Optional[Dict[str, Any]], cursor.fetchone())
         cursor.close()
         conn.close()
-        if row:
-            return row["freight_rate_usd"]
+
+        if row and "freight_rate_usd" in row:
+            value = row["freight_rate_usd"]
+
+            # ✅ Decimal を float に変換して返す
+            if isinstance(value, Decimal):
+                return float(value)
+            else:
+                logger.warning(f"Unexpected data type for freight_rate_usd: {type(value)}")
+
     except Exception as e:
         logger.error(f"[ERROR] 運賃取得失敗: {e}")
+
     return None
 
 # 商品マスタ取得API
