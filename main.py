@@ -20,7 +20,7 @@ from urllib.parse import unquote
 from dotenv import load_dotenv
 import traceback
 from fastapi.responses import JSONResponse
-import camelot
+import camelot # type: ignore
 import warnings
 
 # ローカル用 .env 読み込み（Azure環境では無視される）
@@ -51,7 +51,7 @@ warnings.filterwarnings("ignore", message="Cannot set gray non-stroke color")
 client = AzureOpenAI(
     api_key=os.getenv("OPENAI_API_KEY"),
     api_version=os.getenv("OPENAI_API_VERSION"),
-    azure_endpoint=os.getenv("OPENAI_API_BASE")
+    azure_endpoint=os.getenv("OPENAI_API_BASE") or ""
 )
 
 app = FastAPI()
@@ -75,6 +75,10 @@ DB_CONFIG = {
 
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)
+
+def format_date(date_obj: Optional[datetime]) -> str:
+    """ 日付オブジェクトを 'YYYY-MM-DD' 形式の文字列に変換 """
+    return date_obj.strftime("%Y-%m-%d") if date_obj else "N/A"
 
 # 商品マスタ取得API
 TABLE_NAME = "shipping_company"
@@ -115,8 +119,8 @@ async def extract_schedule_positions(
     url: str,
     departure: str,
     destination: str,
-    etd_date: datetime = None,
-    eta_date: datetime = None
+    etd_date: Optional[datetime] = None,
+    eta_date: Optional[datetime] = None
 ):
     
     import os
@@ -279,7 +283,7 @@ async def extract_schedule_positions(
         prompt = f"""
 以下はPDFから抽出されたスケジュール候補の行です。
 出発地「{departure}」と目的地「{destination}」（別名: {', '.join(aliases)}）に関連する、
-最も{base_date.strftime('%m/%d')}に近いスケジュール（船名・航海番号・ETD・ETA）を1件だけ抽出してください。
+最も{format_date(base_date)}に近いスケジュール（船名・航海番号・ETD・ETA）を1件だけ抽出してください。
 
 その抽出したスケジュールが複数の船名を有するかどうかを確認し、もし有する場合は1st Vesselの船名を選択してください。
 （有しない場合はそのままの船名を選択してください）
@@ -343,7 +347,7 @@ async def extract_schedule_positions(
                 url,
                 departure,
                 destination,
-                base_date.strftime("%Y-%m-%d"),
+                format_date(base_date),
                 etd_date_str,
                 eta_date_str,
                 vessel,
@@ -394,6 +398,7 @@ async def extract_schedule_positions(
 
 
 async def get_pdf_links_from_one(destination_keyword: str) -> list[str]:
+    result = None  # 初期化
     try:
         # app/get_pdf_links.py のパスを指定
         script_path = Path(__file__).resolve().parent / "app" / "get_pdf_links.py"
@@ -408,17 +413,29 @@ async def get_pdf_links_from_one(destination_keyword: str) -> list[str]:
             env=os.environ.copy(),
         )
 
-        logger.info(f"[DEBUG] get_pdf_links.py stdout:\n{result.stdout}")
+        # 正常な出力が存在する場合のみログ出力
+        if result.stdout:
+            logger.info(f"[DEBUG] get_pdf_links.py stdout:\n{result.stdout}")
+        
+        # 出力結果を JSON としてパース
         return json.loads(result.stdout)
     
     except json.JSONDecodeError as je:
         logger.error(f"[ERROR] JSON Decode Error: {je}")
-        logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        # result が None でない場合のみ stdout にアクセス
+        if result and result.stdout:
+            logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        else:
+            logger.error("[DEBUG] stdout is None")
         return []
     
     except subprocess.CalledProcessError as cpe:
         logger.error(f"[CalledProcessError] stderr:\n{cpe.stderr}")
-        logger.error(f"[CalledProcessError] stdout:\n{cpe.stdout}")
+        # stdout が存在する場合のみログ出力
+        if cpe.stdout:
+            logger.error(f"[CalledProcessError] stdout:\n{cpe.stdout}")
+        else:
+            logger.error("[CalledProcessError] stdout is None")
         return []
     
     except Exception as e:
@@ -427,6 +444,7 @@ async def get_pdf_links_from_one(destination_keyword: str) -> list[str]:
     
 # COSCOのPDFリンク取得用
 async def get_pdf_links_from_cosco(destination_keyword: str) -> list[str]:
+    result = None  # 初期化
     try:
         # get_cosco_pdf_links.py のフルパスを指定
         script_path = Path(__file__).resolve().parent / "app" / "get_cosco_pdf_links.py"
@@ -441,17 +459,33 @@ async def get_pdf_links_from_cosco(destination_keyword: str) -> list[str]:
             env=os.environ.copy(),  # 現在の環境変数を明示的に渡す（Playwrightの実行にも必要）
         )
 
-        logger.info(f"[COSCO PDFリンク取得] stdout:\n{result.stdout}")
-        return json.loads(result.stdout)
+        # 正常な場合のみログ出力
+        if result.stdout:
+            logger.info(f"[COSCO PDFリンク取得] stdout:\n{result.stdout}")
 
+        return json.loads(result.stdout)
+    
     except json.JSONDecodeError as je:
         logger.error(f"[ERROR] JSON Decode Error: {je}")
-        logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        # result が None でない場合のみ stdout にアクセス
+        if result and result.stdout:
+            logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        else:
+            logger.error("[DEBUG] stdout is None")
         return []
 
     except subprocess.CalledProcessError as spe:
         logger.error(f"[ERROR] CalledProcessError: {spe}")
-        logger.error(f"[stderr]\n{spe.stderr}")
+        # stdout と stderr が存在するかを確認してから出力
+        if spe.stdout:
+            logger.error(f"[stderr]\n{spe.stderr}")
+        else:
+            logger.error("[stderr] None")
+
+        if spe.stdout:
+            logger.error(f"[stdout]\n{spe.stdout}")
+        else:
+            logger.error("[stdout] None")
         return []
 
     except Exception as e:
@@ -460,6 +494,7 @@ async def get_pdf_links_from_cosco(destination_keyword: str) -> list[str]:
     
 # KINKAのPDFリンク取得用
 async def get_pdf_links_from_kinka(destination_keyword: str) -> list[str]:
+    result = None  # 初期化
     try:
         script_path = Path(__file__).resolve().parent / "app" / "get_kinka_pdf_links.py"
         cwd_path = script_path.parent
@@ -473,12 +508,22 @@ async def get_pdf_links_from_kinka(destination_keyword: str) -> list[str]:
             env=os.environ.copy(),  # 現在の環境変数を明示的に渡す（Playwrightの実行にも必要）
         )
 
-        logger.info(f"[KINKA PDFリンク取得] stdout:\n{result.stdout}")
+        # 正常な場合のみ stdout をログ出力
+        if result.stdout:
+            logger.info(f"[KINKA PDFリンク取得] stdout:\n{result.stdout}")
+
+        # 出力を JSON としてパース
         return json.loads(result.stdout)
+    
     except json.JSONDecodeError as je:
         logger.error(f"[ERROR] JSON Decode Error: {je}")
-        logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        # result が None でない場合のみ stdout を参照
+        if result and result.stdout:
+            logger.error(f"[DEBUG] 実際の出力内容: {result.stdout}")
+        else:
+            logger.error("[DEBUG] stdout is None")
         return []
+
     except Exception as e:
         logger.error(f"[ERROR] KINKA get_pdf_links 実行失敗: {e}")
         return []
