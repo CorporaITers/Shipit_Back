@@ -278,7 +278,7 @@ async def extract_schedule_positions(
             table_data += f"\n--- テーブル {i + 1} ---\n"
             table_data += table.df.to_string()
 
-        logger.info(f"抽出データ:\n{table_data}")
+        # logger.info(f"抽出データ:\n{table_data}")
 
         # for table in tables:
         #     df = table.df
