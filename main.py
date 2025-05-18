@@ -25,7 +25,7 @@ import camelot.io as camelot
 import warnings
 
 # ローカル用 .env 読み込み（Azure環境では無視される）
-load_dotenv()
+load_dotenv(override=True)
 
 # ログ設定
 logging.basicConfig(
